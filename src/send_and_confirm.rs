@@ -8,6 +8,7 @@ use solana_client::{
     rpc_config::{RpcSendTransactionConfig, RpcSimulateTransactionConfig},
 };
 use solana_program::instruction::Instruction;
+use solana_program::instruction::AccountMeta;
 use solana_sdk::{
     commitment_config::CommitmentLevel,
     compute_budget::ComputeBudgetInstruction,
@@ -18,13 +19,13 @@ use solana_transaction_status::{TransactionConfirmationStatus, UiTransactionEnco
 
 use crate::Miner;
 
-const RPC_RETRIES: usize = 0;
-const SIMULATION_RETRIES: usize = 4;
-const GATEWAY_RETRIES: usize = 4;
-const CONFIRM_RETRIES: usize = 4;
+const RPC_RETRIES: usize = 3;
+const SIMULATION_RETRIES: usize = 3;
+const GATEWAY_RETRIES: usize = 3;
+const CONFIRM_RETRIES: usize = 3;
 
-const CONFIRM_DELAY: u64 = 5000;
-const GATEWAY_DELAY: u64 = 2000;
+const CONFIRM_DELAY: u64 = 2000;
+const GATEWAY_DELAY: u64 = 100;
 
 impl Miner {
     pub async fn send_and_confirm(
@@ -35,16 +36,17 @@ impl Miner {
     ) -> ClientResult<Signature> {
         let mut stdout = stdout();
         let signer = self.signer();
+        let payer = self.payer();
         let client = self.rpc_client.clone();
 
         // Return error if balance is zero
-        let balance = client.get_balance(&signer.pubkey()).await.unwrap();
-        if balance <= 0 {
-            return Err(ClientError {
-                request: None,
-                kind: ClientErrorKind::Custom("Insufficient SOL balance".into()),
-            });
-        }
+        // let balance = client.get_balance(&signer.pubkey()).await.unwrap();
+        // if balance <= 0 {
+        //     return Err(ClientError {
+        //         request: None,
+        //         kind: ClientErrorKind::Custom("Insufficient SOL balance".into()),
+        //     });
+        // }
 
         // Build tx
         let (hash, slot) = client
@@ -58,7 +60,8 @@ impl Miner {
             max_retries: Some(RPC_RETRIES),
             min_context_slot: Some(slot),
         };
-        let mut tx = Transaction::new_with_payer(ixs, Some(&signer.pubkey()));
+        println!("Paying with {}",payer.pubkey());
+        let mut tx = Transaction::new_with_payer(ixs, Some(&payer.pubkey()));
 
         // Simulate tx
         let mut sim_attempts = 0;
@@ -93,7 +96,7 @@ impl Miner {
                             let mut final_ixs = vec![];
                             final_ixs.extend_from_slice(&[cu_budget_ix, cu_price_ix]);
                             final_ixs.extend_from_slice(ixs);
-                            tx = Transaction::new_with_payer(&final_ixs, Some(&signer.pubkey()));
+                            tx = Transaction::new_with_payer(&final_ixs, Some(&payer.pubkey()));
                         }
                         break 'simulate;
                     }
@@ -114,7 +117,7 @@ impl Miner {
         }
 
         // Submit tx
-        tx.sign(&[&signer], hash);
+        tx.sign(&[&payer, &signer], hash);
         // let mut sigs = vec![];
         let mut attempts = 0;
         loop {

