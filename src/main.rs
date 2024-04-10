@@ -200,12 +200,10 @@ async fn main() {
     // Initialize miner.
     let cluster = args.rpc.unwrap_or(cli_config.json_rpc_url);
     let default_keypair = args.keypair.unwrap_or(cli_config.keypair_path);
-<<<<<<< HEAD
+
     let user_payer = args.payer.unwrap_or(default_keypair.clone());
     let rpc_client = RpcClient::new_with_commitment(cluster, CommitmentConfig::finalized());
-=======
-    let rpc_client = RpcClient::new_with_commitment(cluster, CommitmentConfig::confirmed());
->>>>>>> 524bb8c2521a6a4eac1d21c621eadfc9cc1fb809
+
 
     let miner = Arc::new(Miner::new(
         Arc::new(rpc_client),
